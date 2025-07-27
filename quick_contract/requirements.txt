@@ -2,4 +2,7 @@ fastapi==0.116.1
 uvicorn==0.35.0
 sqlalchemy==2.0.41
 pydantic==2.11.7
-python-multipart==0.0.20 
+python-multipart==0.0.20
+jinja2==3.1.4
+weasyprint==62.3
+reportlab==4.0.8 
