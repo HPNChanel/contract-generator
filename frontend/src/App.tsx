@@ -45,7 +45,7 @@ function App() {
     localStorage.setItem('recentContractIds', JSON.stringify(updated))
   }
 
-  const handleFormSubmit = async (data: ContractData) => {
+  const handleFormSubmit = async (data: ContractData, signature?: File | string) => {
     setIsLoading(true)
     setError('')
     setContract(undefined)
@@ -53,7 +53,7 @@ function App() {
     try {
       toast.loading('Generating contract...', { id: 'contract-generation' })
       
-      const response = await contractApi.createContract(data)
+      const response = await contractApi.createContract(data, signature)
       setContract(response)
       saveContractToLocalStorage(response.contract_id)
       
@@ -61,6 +61,19 @@ function App() {
         id: 'contract-generation',
         duration: 4000 
       })
+
+      // Show email status if recipient email was provided
+      if (data.recipient_email && data.recipient_email.trim() !== '') {
+        if (response.email_sent) {
+          toast.success(`Contract PDF sent to ${data.recipient_email}`, { 
+            duration: 5000 
+          })
+        } else {
+          toast.error(`Failed to send email to ${data.recipient_email}`, { 
+            duration: 5000 
+          })
+        }
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred'
       setError(errorMessage)

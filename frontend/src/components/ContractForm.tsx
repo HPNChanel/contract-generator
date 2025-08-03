@@ -8,6 +8,7 @@ import { Textarea } from './ui/textarea'
 import { Select } from './ui/select'
 import { Label } from './ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { SignatureCanvas } from './SignatureCanvas'
 
 // Form validation schema
 const contractFormSchema = z.object({
@@ -25,13 +26,14 @@ const contractFormSchema = z.object({
   terms: z.string().min(10, "Terms must be at least 10 characters long"),
   start_date: z.string().min(1, "Start date is required"),
   end_date: z.string().min(1, "End date is required"),
-  additional_clauses: z.array(z.string()).optional()
+  additional_clauses: z.array(z.string()).optional(),
+  recipient_email: z.string().email("Invalid email address").optional().or(z.literal(""))
 })
 
 type ContractFormData = z.infer<typeof contractFormSchema>
 
 interface ContractFormProps {
-  onSubmit: (data: ContractFormData) => void
+  onSubmit: (data: ContractFormData, signature?: File | string) => void
   isLoading?: boolean
 }
 
@@ -49,6 +51,10 @@ const contractTypes = [
 
 export function ContractForm({ onSubmit, isLoading = false }: ContractFormProps) {
   const [additionalClauses, setAdditionalClauses] = useState<string[]>([''])
+  const [signatureFile, setSignatureFile] = useState<File | null>(null)
+  const [signaturePreview, setSignaturePreview] = useState<string | null>(null)
+  const [signatureMode, setSignatureMode] = useState<'upload' | 'draw'>('upload')
+  const [drawnSignature, setDrawnSignature] = useState<string | null>(null)
 
   const {
     register,
@@ -64,7 +70,8 @@ export function ContractForm({ onSubmit, isLoading = false }: ContractFormProps)
       terms: "",
       start_date: "",
       end_date: "",
-      additional_clauses: []
+      additional_clauses: [],
+      recipient_email: ""
     }
   })
 
@@ -85,13 +92,76 @@ export function ContractForm({ onSubmit, isLoading = false }: ContractFormProps)
     setValue('additional_clauses', newClauses.filter(clause => clause.trim() !== ''))
   }
 
+  const handleSignatureFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      // Validate file type (images only)
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file for the signature')
+        return
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Signature image must be smaller than 5MB')
+        return
+      }
+      
+      setSignatureFile(file)
+      
+      // Create preview
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setSignaturePreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeSignatureFile = () => {
+    setSignatureFile(null)
+    setSignaturePreview(null)
+  }
+
+  const handleDrawnSignatureChange = (signature: string | null) => {
+    setDrawnSignature(signature)
+  }
+
+  const clearAllSignatures = () => {
+    setSignatureFile(null)
+    setSignaturePreview(null)
+    setDrawnSignature(null)
+  }
+
+  const getEffectiveSignature = (): File | string | undefined => {
+    if (signatureMode === 'draw' && drawnSignature) {
+      return drawnSignature
+    } else if (signatureMode === 'upload' && signatureFile) {
+      return signatureFile
+    }
+    return undefined
+  }
+
   const onFormSubmit = (data: ContractFormData) => {
-    // Filter out empty additional clauses
+    // Filter out empty additional clauses and clean up empty email fields
     const filteredData = {
       ...data,
-      additional_clauses: additionalClauses.filter(clause => clause.trim() !== '')
+      additional_clauses: additionalClauses.filter(clause => clause.trim() !== ''),
+      party_a: {
+        ...data.party_a,
+        email: data.party_a.email?.trim() || undefined,
+        address: data.party_a.address?.trim() || undefined
+      },
+      party_b: {
+        ...data.party_b,
+        email: data.party_b.email?.trim() || undefined,
+        address: data.party_b.address?.trim() || undefined
+      },
+      recipient_email: data.recipient_email?.trim() || undefined
     }
-    onSubmit(filteredData)
+    
+    const signature = getEffectiveSignature()
+    onSubmit(filteredData, signature)
   }
 
   return (
@@ -272,6 +342,112 @@ export function ContractForm({ onSubmit, isLoading = false }: ContractFormProps)
                 )}
               </div>
             ))}
+          </div>
+
+          {/* Electronic Signature */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label>Electronic Signature (Optional)</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={signatureMode === 'draw' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setSignatureMode('draw')
+                    clearAllSignatures()
+                  }}
+                  disabled={isLoading}
+                >
+                  Draw
+                </Button>
+                <Button
+                  type="button"
+                  variant={signatureMode === 'upload' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setSignatureMode('upload')
+                    clearAllSignatures()
+                  }}
+                  disabled={isLoading}
+                >
+                  Upload
+                </Button>
+              </div>
+            </div>
+
+            {signatureMode === 'draw' ? (
+              <div className="space-y-3">
+                <SignatureCanvas
+                  onSignatureChange={handleDrawnSignatureChange}
+                  disabled={isLoading}
+                />
+                {drawnSignature && (
+                  <div className="text-sm text-green-600 flex items-center gap-2">
+                    <span>✓ Signature captured</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDrawnSignature(null)}
+                      disabled={isLoading}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Input
+                  id="signature"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleSignatureFileChange}
+                  disabled={isLoading}
+                />
+                <p className="text-sm text-gray-500">
+                  Upload a signature image (PNG, JPG, etc. - max 5MB)
+                </p>
+                
+                {signaturePreview && (
+                  <div className="relative inline-block">
+                    <img 
+                      src={signaturePreview} 
+                      alt="Signature preview" 
+                      className="max-w-xs max-h-24 border border-gray-200 rounded"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={removeSignatureFile}
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
+                      disabled={isLoading}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Email Recipient */}
+          <div className="space-y-2">
+            <Label htmlFor="recipient_email">Email Recipient (Optional)</Label>
+            <Input
+              {...register("recipient_email")}
+              id="recipient_email"
+              type="email"
+              placeholder="Enter email to send contract PDF"
+            />
+            {errors.recipient_email && (
+              <p className="text-sm text-destructive">{errors.recipient_email.message}</p>
+            )}
+            <p className="text-sm text-gray-500">
+              If provided, the generated PDF will be automatically sent to this email address
+            </p>
           </div>
 
           {/* Submit Button */}

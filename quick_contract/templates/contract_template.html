@@ -49,6 +49,17 @@
             padding-top: 10px;
             text-align: center;
         }
+        .signature-image {
+            max-width: 150px;
+            max-height: 60px;
+            margin: 10px auto;
+            display: block;
+        }
+        .signature-placeholder {
+            height: 60px;
+            border-bottom: 1px solid #333;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
@@ -113,13 +124,17 @@
 
     <div class="signature-section">
         <div class="signature">
-            <p>_________________________</p>
+            {% if signature_base64 %}
+            <img src="{{ signature_base64 }}" alt="Signature" class="signature-image" />
+            {% else %}
+            <div class="signature-placeholder"></div>
+            {% endif %}
             <p><strong>{{ party_a.name }}</strong></p>
             <p>Party A</p>
             <p>Date: _________________</p>
         </div>
         <div class="signature">
-            <p>_________________________</p>
+            <div class="signature-placeholder"></div>
             <p><strong>{{ party_b.name }}</strong></p>
             <p>Party B</p>
             <p>Date: _________________</p>

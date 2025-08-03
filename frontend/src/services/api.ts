@@ -26,6 +26,7 @@ export interface ContractData {
   end_date: string
   additional_clauses?: string[]
   custom_pdf_filename?: string
+  recipient_email?: string
 }
 
 export interface ContractResponse {
@@ -57,6 +58,8 @@ export interface ContractResponse {
     filename: string
     download_url: string
   }
+  email_sent?: boolean
+  email_error?: string
 }
 
 export interface ApiError {
@@ -79,9 +82,39 @@ export const contractApi = {
     }
   },
   // Create a new contract
-  createContract: async (data: ContractData): Promise<ContractResponse> => {
+  createContract: async (data: ContractData, signature?: File | string): Promise<ContractResponse> => {
     try {
-      const response = await api.post<ContractResponse>('/contracts', data)
+      let response;
+      
+      if (signature) {
+        if (signature instanceof File) {
+          // Use multipart/form-data when signature file is provided
+          const formData = new FormData()
+          
+          // Add all contract data as JSON string
+          formData.append('contract_data', JSON.stringify(data))
+          
+          // Add signature file
+          formData.append('signature_file', signature)
+          
+          response = await axios.post<ContractResponse>(`${API_BASE_URL}/contracts`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          })
+        } else {
+          // String signature (base64) - send as JSON with signature_base64 field
+          const dataWithSignature = {
+            ...data,
+            signature_base64: signature
+          }
+          response = await api.post<ContractResponse>('/contracts', dataWithSignature)
+        }
+      } else {
+        // Use regular JSON request when no signature
+        response = await api.post<ContractResponse>('/contracts', data)
+      }
+      
       return response.data
     } catch (error) {
       if (axios.isAxiosError(error)) {
